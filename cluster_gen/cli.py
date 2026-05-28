@@ -1,4 +1,13 @@
-"""Module 7 — CLI interactif (mode maître et mode auxiliaire)."""
+"""Module 7 — CLI interactif (mode maître et mode auxiliaire).
+
+Architecture :
+  - Mode MAÎTRE : génère un compose à 3 nœuds + Kibana, autonome.
+    Le maître ne scanne pas le réseau ; tout auxiliaire configuré avec
+    l'IP du maître rejoindra automatiquement le cluster.
+  - Mode AUXILIAIRE : interroge l'API ES du maître pour récupérer
+    l'état courant, calcule le prochain numéro de nœud libre, génère
+    un compose avec seed_hosts = maître + auxiliaires déjà connus.
+"""
 
 import os
 import sys
@@ -6,8 +15,7 @@ import sys
 from .compose import generer_compose_principal, generer_compose_auxiliaire
 from .constants import NOEUDS_PRINCIPAUX
 from .maitre_es import interroger_maitre
-from .reseau import detecter_reseau, scanner_reseau
-from .topologie import construire_topologie
+from .topologie import construire_topologie_principale
 
 
 def print_header():
@@ -28,54 +36,18 @@ def _ecrire_fichier(chemin, contenu, force):
         f.write(contenu)
 
 
-def _selectionner_auxiliaires(decouverts, nb_requis):
-    print(f"✓ {len(decouverts)} machines découvertes :")
-    for i, ip in enumerate(decouverts, 1):
-        print(f"  [{i}] {ip}")
-    while True:
-        saisie = input(
-            f"\n→ Sélectionnez {nb_requis} machines auxiliaires "
-            f"(ex: 1,2,3,4) : "
-        ).strip()
-        try:
-            idx = [int(x) for x in saisie.split(",") if x.strip()]
-            if len(idx) != nb_requis:
-                print(f"  ✗ Attendu {nb_requis} indices, reçu {len(idx)}")
-                continue
-            if any(i < 1 or i > len(decouverts) for i in idx):
-                print("  ✗ Indice hors plage")
-                continue
-            return [decouverts[i - 1] for i in idx]
-        except ValueError:
-            print("  ✗ Saisie invalide")
-
-
 def mode_maitre(config, ip_locale, force=False):
-    nombre_noeuds = config["cluster"]["nombre_noeuds"]
-    nb_aux = nombre_noeuds - NOEUDS_PRINCIPAUX
-
     print("ℹ Mode : MAÎTRE (ip_maitre vide dans config)")
-    print(f"ℹ Cluster : {config['cluster']['nom']} | {nombre_noeuds} nœuds total\n")
-    reseau = detecter_reseau(ip_locale)
-    print(f"⏳ Scan du réseau {reseau} ...")
-    decouverts = scanner_reseau(ip_locale)
+    print(f"ℹ Cluster : {config['cluster']['nom']}")
+    print(f"ℹ Les auxiliaires rejoindront le cluster en pointant sur {ip_locale}\n")
 
-    if len(decouverts) < nb_aux:
-        print(
-            f"✗ Seulement {len(decouverts)} machines découvertes, "
-            f"{nb_aux} requises."
-        )
-        sys.exit(1)
+    topologie = construire_topologie_principale(ip_locale)
 
-    ips_aux = _selectionner_auxiliaires(decouverts, nb_aux)
-    topologie = construire_topologie(ip_locale, ips_aux, nombre_noeuds)
-
-    print("\n✓ Topologie construite :")
+    print("✓ Topologie locale :")
     for n in sorted(topologie):
         info = topologie[n]
-        role = "principal" if n <= NOEUDS_PRINCIPAUX else "auxiliaire"
         print(
-            f"  node-{n} → {info['ip']}:{info['http']}/{info['transport']} ({role})"
+            f"  node-{n} → {info['ip']}:{info['http']}/{info['transport']}"
         )
 
     contenu = generer_compose_principal(topologie, config)
@@ -100,8 +72,6 @@ def _topologie_depuis_maitre(reponse, ip_maitre):
             num = int(nom.split("-")[1])
         except (ValueError, IndexError):
             continue
-        # Les 3 premiers nœuds tournent toujours sur la machine maître ;
-        # ES peut renvoyer une IP interne — on force ip_maitre.
         ip_effective = ip_maitre if num <= NOEUDS_PRINCIPAUX else ip
         topologie[num] = {
             "ip": ip_effective,
@@ -133,7 +103,6 @@ def mode_auxiliaire(config, ip_locale, force=False):
         )
     else:
         print("⚠ Maître ES non accessible — fallback dégradé")
-        # Au minimum les 3 nœuds principaux
         for i in range(1, NOEUDS_PRINCIPAUX + 1):
             topologie[i] = {
                 "ip": ip_maitre,
@@ -142,7 +111,6 @@ def mode_auxiliaire(config, ip_locale, force=False):
             }
             noeuds_existants.add(i)
 
-    # Attribution du prochain numéro libre
     numero = None
     for cand in range(NOEUDS_PRINCIPAUX + 1, nombre_noeuds + 1):
         if cand not in noeuds_existants:
@@ -163,7 +131,6 @@ def mode_auxiliaire(config, ip_locale, force=False):
             except ValueError:
                 print("  ✗ Saisie invalide")
 
-    # Ce nœud rejoint la topologie avec son IP locale
     topologie[numero] = {
         "ip": ip_locale,
         "http": 9200 + numero,

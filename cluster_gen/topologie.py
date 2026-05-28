@@ -3,15 +3,16 @@
 from .constants import NOEUDS_PRINCIPAUX
 
 
-def construire_topologie(ip_principale, ips_auxiliaires, nombre_noeuds):
-    topo = {}
-    for i in range(1, NOEUDS_PRINCIPAUX + 1):
-        topo[i] = {"ip": ip_principale, "http": 9200 + i, "transport": 9300 + i}
-    for j, ip in enumerate(ips_auxiliaires, start=NOEUDS_PRINCIPAUX + 1):
-        if j > nombre_noeuds:
-            break
-        topo[j] = {"ip": ip, "http": 9200 + j, "transport": 9300 + j}
-    return topo
+def construire_topologie_principale(ip_principale):
+    """Topologie restreinte à la machine maître : les 3 nœuds locaux.
+
+    Les auxiliaires rejoindront le cluster d'eux-mêmes en pointant sur
+    l'IP du maître — pas besoin de les déclarer ici.
+    """
+    return {
+        i: {"ip": ip_principale, "http": 9200 + i, "transport": 9300 + i}
+        for i in range(1, NOEUDS_PRINCIPAUX + 1)
+    }
 
 
 def construire_seed_hosts(topologie, exclure_noeud):

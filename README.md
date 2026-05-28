@@ -69,10 +69,11 @@ python3 generate_compose.py
 
 Le script :
 1. détecte l'IP locale,
-2. scanne le réseau /24 (ping sweep parallèle, ~5 s),
-3. propose les machines découvertes ; on sélectionne les auxiliaires
-   (ex : `1,2,3,4`),
-4. génère **`docker-compose-prim.yml`** (3 nœuds ES + Kibana).
+2. génère **`docker-compose-prim.yml`** (3 nœuds ES + Kibana) autonome.
+
+> Le maître ne déclare pas les auxiliaires à l'avance. Tout nœud auxiliaire
+> qui démarrera avec l'IP de cette machine dans `config.yml` rejoindra
+> automatiquement le cluster.
 
 Démarrage du cluster :
 
@@ -160,13 +161,12 @@ python3 generate_compose.py --config autre_config.yml
 
 ## 8. Limitations connues
 
-- Le scan réseau suppose un sous‑réseau **/24**.
-- Le ping sweep nécessite **ICMP autorisé** sur le LAN.
 - Sécurité ES désactivée (`xpack.security.enabled=false`) — **usage en
   réseau de confiance uniquement**.
-- Si plusieurs auxiliaires s'enregistrent simultanément, relancer le script
-  sur celui qui échoue.
-- Linux uniquement (option `ping -W`).
+- Si plusieurs auxiliaires s'enregistrent simultanément avant d'apparaître
+  dans `_cat/nodes`, ils peuvent choisir le même numéro ; relancer le
+  script sur celui qui échoue.
+- Linux uniquement (option `ping -W`, commande `ip`).
 
 Voir [`GUIDE_DEPLOIEMENT_V2.md`](./GUIDE_DEPLOIEMENT_V2.md) pour la
 procédure manuelle de référence.
