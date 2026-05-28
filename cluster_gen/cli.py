@@ -1,12 +1,12 @@
 """Module 7 — CLI interactif (mode maître et mode auxiliaire)."""
 
-import ipaddress
+import os
 import sys
 
 from .compose import generer_compose_principal, generer_compose_auxiliaire
 from .constants import NOEUDS_PRINCIPAUX
 from .maitre_es import interroger_maitre
-from .reseau import scanner_reseau
+from .reseau import detecter_reseau, scanner_reseau
 from .topologie import construire_topologie
 
 
@@ -14,6 +14,18 @@ def print_header():
     print("═══════════════════════════════════════")
     print("  Générateur Docker-Compose ES Cluster")
     print("═══════════════════════════════════════\n")
+
+
+def _ecrire_fichier(chemin, contenu, force):
+    if os.path.exists(chemin) and not force:
+        rep = input(
+            f"⚠ Le fichier {chemin} existe déjà. Écraser ? [y/N] : "
+        ).strip().lower()
+        if rep not in ("y", "yes", "o", "oui"):
+            print("✗ Abandon.")
+            sys.exit(1)
+    with open(chemin, "w", encoding="utf-8") as f:
+        f.write(contenu)
 
 
 def _selectionner_auxiliaires(decouverts, nb_requis):
@@ -38,13 +50,13 @@ def _selectionner_auxiliaires(decouverts, nb_requis):
             print("  ✗ Saisie invalide")
 
 
-def mode_maitre(config, ip_locale):
+def mode_maitre(config, ip_locale, force=False):
     nombre_noeuds = config["cluster"]["nombre_noeuds"]
     nb_aux = nombre_noeuds - NOEUDS_PRINCIPAUX
 
     print("ℹ Mode : MAÎTRE (ip_maitre vide dans config)")
     print(f"ℹ Cluster : {config['cluster']['nom']} | {nombre_noeuds} nœuds total\n")
-    reseau = ipaddress.ip_network(f"{ip_locale}/24", strict=False)
+    reseau = detecter_reseau(ip_locale)
     print(f"⏳ Scan du réseau {reseau} ...")
     decouverts = scanner_reseau(ip_locale)
 
@@ -68,12 +80,39 @@ def mode_maitre(config, ip_locale):
 
     contenu = generer_compose_principal(topologie, config)
     sortie = "docker-compose-prim.yml"
-    with open(sortie, "w", encoding="utf-8") as f:
-        f.write(contenu)
+    _ecrire_fichier(sortie, contenu, force)
     print(f"\n✓ Fichier généré : {sortie}")
 
 
-def mode_auxiliaire(config, ip_locale):
+def _topologie_depuis_maitre(reponse, ip_maitre):
+    """Construit la topologie à partir de la réponse `_cat/nodes` du maître.
+
+    Retourne (topologie, set_des_numeros_existants).
+    """
+    topologie = {}
+    existants = set()
+    for n in reponse["noeuds"]:
+        nom = n.get("name", "")
+        ip = n.get("ip", "")
+        if not nom.startswith("node-") or not ip:
+            continue
+        try:
+            num = int(nom.split("-")[1])
+        except (ValueError, IndexError):
+            continue
+        # Les 3 premiers nœuds tournent toujours sur la machine maître ;
+        # ES peut renvoyer une IP interne — on force ip_maitre.
+        ip_effective = ip_maitre if num <= NOEUDS_PRINCIPAUX else ip
+        topologie[num] = {
+            "ip": ip_effective,
+            "http": 9200 + num,
+            "transport": 9300 + num,
+        }
+        existants.add(num)
+    return topologie, existants
+
+
+def mode_auxiliaire(config, ip_locale, force=False):
     ip_maitre = config["ip_maitre"]
     nombre_noeuds = config["cluster"]["nombre_noeuds"]
 
@@ -81,28 +120,34 @@ def mode_auxiliaire(config, ip_locale):
     print("ℹ Interrogation du maître ES...")
 
     reponse = interroger_maitre(ip_maitre)
-    noeuds_existants = []
+    topologie = {}
+    noeuds_existants = set()
+
     if reponse is not None:
-        for n in reponse["noeuds"]:
-            nom = n.get("name", "")
-            if nom.startswith("node-"):
-                try:
-                    noeuds_existants.append(int(nom.split("-")[1]))
-                except (ValueError, IndexError):
-                    pass
+        topologie, noeuds_existants = _topologie_depuis_maitre(
+            reponse, ip_maitre
+        )
         print(
             f"✓ Cluster trouvé : {config['cluster']['nom']} "
             f"({len(noeuds_existants)} nœuds actifs)"
         )
     else:
-        print("⚠ Maître ES non accessible — fallback interactif")
+        print("⚠ Maître ES non accessible — fallback dégradé")
+        # Au minimum les 3 nœuds principaux
+        for i in range(1, NOEUDS_PRINCIPAUX + 1):
+            topologie[i] = {
+                "ip": ip_maitre,
+                "http": 9200 + i,
+                "transport": 9300 + i,
+            }
+            noeuds_existants.add(i)
 
+    # Attribution du prochain numéro libre
     numero = None
-    if noeuds_existants:
-        for cand in range(NOEUDS_PRINCIPAUX + 1, nombre_noeuds + 1):
-            if cand not in noeuds_existants:
-                numero = cand
-                break
+    for cand in range(NOEUDS_PRINCIPAUX + 1, nombre_noeuds + 1):
+        if cand not in noeuds_existants:
+            numero = cand
+            break
 
     if numero is None:
         while True:
@@ -118,9 +163,7 @@ def mode_auxiliaire(config, ip_locale):
             except ValueError:
                 print("  ✗ Saisie invalide")
 
-    topologie = {}
-    for i in range(1, NOEUDS_PRINCIPAUX + 1):
-        topologie[i] = {"ip": ip_maitre, "http": 9200 + i, "transport": 9300 + i}
+    # Ce nœud rejoint la topologie avec son IP locale
     topologie[numero] = {
         "ip": ip_locale,
         "http": 9200 + numero,
@@ -131,9 +174,9 @@ def mode_auxiliaire(config, ip_locale):
         f"✓ Nœud attribué : node-{numero} "
         f"(ports {9200 + numero}/{9300 + numero})"
     )
+    print(f"  seed_hosts inclura {len(topologie) - 1} autres nœuds")
 
     contenu = generer_compose_auxiliaire(numero, topologie, config)
     sortie = "docker-compose-aux.yml"
-    with open(sortie, "w", encoding="utf-8") as f:
-        f.write(contenu)
+    _ecrire_fichier(sortie, contenu, force)
     print(f"\n✓ Fichier généré : {sortie}")

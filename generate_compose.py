@@ -22,6 +22,11 @@ def main():
         default="config.yml",
         help="Chemin du fichier de configuration (défaut: config.yml)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Écrase le fichier de sortie sans demander confirmation",
+    )
     args = parser.parse_args()
 
     print_header()
@@ -43,9 +48,9 @@ def main():
 
     ip_maitre = (config.get("ip_maitre") or "").strip()
     if ip_maitre == "":
-        mode_maitre(config, ip_locale)
+        mode_maitre(config, ip_locale, force=args.force)
     else:
-        mode_auxiliaire(config, ip_locale)
+        mode_auxiliaire(config, ip_locale, force=args.force)
 
 
 if __name__ == "__main__":

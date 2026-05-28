@@ -1,4 +1,12 @@
-"""Module 6 — Génération des fichiers docker-compose."""
+"""Module 6 — Génération des fichiers docker-compose.
+
+Notes :
+  - `cluster.initial_master_nodes` n'est inclus QUE dans le fichier maître
+    (bootstrap initial). Les nœuds auxiliaires qui rejoignent un cluster
+    déjà formé ne doivent pas porter cette directive (risque de split-brain).
+  - La liste `initial_master_nodes` ne contient que les nœuds maîtres
+    éligibles du bootstrap, soit `node-1,node-2,node-3`.
+"""
 
 import yaml
 
@@ -6,24 +14,30 @@ from .constants import ES_IMAGE, KIBANA_IMAGE, NOEUDS_PRINCIPAUX
 from .topologie import construire_seed_hosts, construire_master_nodes
 
 
-def _service_es(numero, topologie, nom_cluster, nombre_noeuds):
+def _service_es(numero, topologie, nom_cluster, inclure_initial_masters):
     info = topologie[numero]
+    env = [
+        f"node.name=node-{numero}",
+        f"cluster.name={nom_cluster}",
+        "network.host=0.0.0.0",
+        f"network.publish_host={info['ip']}",
+        f"discovery.seed_hosts={construire_seed_hosts(topologie, numero)}",
+    ]
+    if inclure_initial_masters:
+        env.append(
+            f"cluster.initial_master_nodes={construire_master_nodes(NOEUDS_PRINCIPAUX)}"
+        )
+    env += [
+        f"transport.publish_port={info['transport']}",
+        "xpack.security.enabled=false",
+        "xpack.license.self_generated.type=basic",
+        "ES_JAVA_OPTS=-Xms512m -Xmx512m",
+        "bootstrap.memory_lock=true",
+    ]
     return {
         "image": ES_IMAGE,
         "container_name": f"vpdf-node{numero}",
-        "environment": [
-            f"node.name=node-{numero}",
-            f"cluster.name={nom_cluster}",
-            "network.host=0.0.0.0",
-            f"network.publish_host={info['ip']}",
-            f"discovery.seed_hosts={construire_seed_hosts(topologie, numero)}",
-            f"cluster.initial_master_nodes={construire_master_nodes(nombre_noeuds)}",
-            f"transport.publish_port={info['transport']}",
-            "xpack.security.enabled=false",
-            "xpack.license.self_generated.type=basic",
-            "ES_JAVA_OPTS=-Xms512m -Xmx512m",
-            "bootstrap.memory_lock=true",
-        ],
+        "environment": env,
         "ulimits": {
             "memlock": {"soft": -1, "hard": -1},
             "nofile": {"soft": 65536, "hard": 65536},
@@ -39,12 +53,13 @@ def _service_es(numero, topologie, nom_cluster, nombre_noeuds):
 
 def generer_compose_principal(topologie, config):
     nom_cluster = config["cluster"]["nom"]
-    nombre_noeuds = config["cluster"]["nombre_noeuds"]
 
     services = {}
     volumes = {}
     for n in range(1, NOEUDS_PRINCIPAUX + 1):
-        services[f"es-node{n}"] = _service_es(n, topologie, nom_cluster, nombre_noeuds)
+        services[f"es-node{n}"] = _service_es(
+            n, topologie, nom_cluster, inclure_initial_masters=True
+        )
         volumes[f"es-data{n}"] = {"name": f"vpdf-es-data{n}"}
 
     services["kibana"] = {
@@ -72,11 +87,10 @@ def generer_compose_principal(topologie, config):
 
 def generer_compose_auxiliaire(numero_noeud, topologie, config):
     nom_cluster = config["cluster"]["nom"]
-    nombre_noeuds = config["cluster"]["nombre_noeuds"]
 
     services = {
         f"es-node{numero_noeud}": _service_es(
-            numero_noeud, topologie, nom_cluster, nombre_noeuds
+            numero_noeud, topologie, nom_cluster, inclure_initial_masters=False
         )
     }
     volumes = {f"es-data{numero_noeud}": {"name": f"vpdf-es-data{numero_noeud}"}}
