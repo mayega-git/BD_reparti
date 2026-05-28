@@ -90,7 +90,18 @@ def generer_compose_auxiliaire(numero_noeud, topologie, config):
     services = {
         f"es-node{numero_noeud}": _service_es(
             numero_noeud, topologie, nom_cluster, inclure_initial_masters=False
-        )
+        ),
+        "kibana": {
+            "image": KIBANA_IMAGE,
+            "container_name": f"vpdf-kibana-node{numero_noeud}",
+            "environment": [
+                f"ELASTICSEARCH_HOSTS=http://vpdf-node{numero_noeud}:9200",
+                "xpack.security.enabled=false",
+            ],
+            "ports": ["5601:5601"],
+            "networks": ["vpdf-net"],
+            "depends_on": [f"es-node{numero_noeud}"],
+        },
     }
     volumes = {f"es-data{numero_noeud}": {"name": f"vpdf-es-data{numero_noeud}"}}
 
