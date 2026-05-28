@@ -8,8 +8,7 @@ Notes :
     éligibles du bootstrap, soit `node-1,node-2,node-3`.
 """
 
-import yaml
-
+from . import yaml_io
 from .constants import ES_IMAGE, KIBANA_IMAGE, NOEUDS_PRINCIPAUX
 from .topologie import construire_seed_hosts, construire_master_nodes
 
@@ -82,7 +81,7 @@ def generer_compose_principal(topologie, config):
             "vpdf-net": {"name": "vpdf-network", "driver": "bridge"}
         },
     }
-    return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False)
+    return yaml_io.safe_dump(doc)
 
 
 def generer_compose_auxiliaire(numero_noeud, topologie, config):
@@ -103,4 +102,4 @@ def generer_compose_auxiliaire(numero_noeud, topologie, config):
             "vpdf-net": {"name": "vpdf-network", "driver": "bridge"}
         },
     }
-    return yaml.safe_dump(doc, sort_keys=False, default_flow_style=False)
+    return yaml_io.safe_dump(doc)

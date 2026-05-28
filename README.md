@@ -25,19 +25,13 @@ Convention de ports (calculée automatiquement) :
 Sur chaque machine (maître + auxiliaires) :
 
 - Linux (Ubuntu / Debian recommandé)
-- Python ≥ 3.8
+- Python ≥ 3.8 (stdlib uniquement — aucune dépendance externe)
 - Docker + Docker Compose v2 (`docker compose ...`)
-- Connectivité réseau entre toutes les machines (LAN /24)
+- Connectivité réseau entre toutes les machines
 - Paramètre kernel pour Elasticsearch :
 
 ```bash
 sudo sysctl -w vm.max_map_count=262144
-```
-
-Installer la seule dépendance Python externe :
-
-```bash
-pip3 install pyyaml
 ```
 
 ---

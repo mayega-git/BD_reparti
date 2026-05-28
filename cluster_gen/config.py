@@ -1,13 +1,12 @@
 """Module 1 — Chargement et validation de la configuration."""
 
-import yaml
-
+from . import yaml_io
 from .constants import MIN_NOEUDS
 
 
 def charger_config(chemin):
     with open(chemin, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return yaml_io.safe_load(f.read())
 
 
 def valider_config(config):
