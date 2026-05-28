@@ -1,0 +1,10 @@
+# ─── Configuration du cluster Elasticsearch distribué ───
+
+cluster:
+  nom: "vpdf-cluster"       # Nom du cluster (partagé par tous les nœuds)
+  nombre_noeuds: 7           # Nombre total de nœuds (minimum 7)
+
+# IP de la machine maître.
+# → Laisser VIDE ("") si cette machine EST le maître.
+# → Renseigner l'IP si cette machine est un auxiliaire.
+ip_maitre: ""
