@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+
+  es-node5:
+    image: elasticsearch:8.13.0
+    container_name: vpdf-node5
+    environment:
+      - node.name=node-5
+      - cluster.name=vpdf-cluster
+      - network.host=0.0.0.0
+      - network.publish_host=192.168.123.150 #ip machine auxilliaire
+      - discovery.seed_hosts=192.168.123.155:9301,192.168.123.155:9302,192.168.123.155:9303,192.168.123.155:9304 #192.168.123.155 : ip machine principale
+      - cluster.initial_master_nodes=node-1,node-2,node-3,node-4,node-5 #tous les nodes du cluster
+      - transport.publish_port=9305 #930N
+      - xpack.security.enabled=false
+      - xpack.license.self_generated.type=basic
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9205:9200" #9205 : port externe
+      - "9305:9300"  #9305 : port externe  node-N -> 920N et 930N
+    volumes:
+      - es-data5:/usr/share/elasticsearch/data #node-N -> es-dataN
+    networks:
+      - vpdf-net
+
+volumes:
+  es-data4:
+    name: vpdf-es-data5 # #node-N -> vpdf-es-dataN
+
+networks:
+  vpdf-net:
+    name: vpdf-network
+    driver: bridge
