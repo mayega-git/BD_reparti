@@ -1,0 +1,94 @@
+# ─── Cluster Elasticsearch vpdf — image unifiée vpdf-cluster-node ───
+#
+# Lancement :
+#   Maître      : docker compose --profile master up -d
+#   Auxiliaire  : docker compose --profile aux    up -d
+#
+# Configuration : .env (voir .env.example).
+
+x-es-common: &es-common
+  image: vpdf-cluster-node:latest
+  build: .
+  network_mode: host
+  restart: unless-stopped
+  ulimits:
+    memlock: { soft: -1, hard: -1 }
+    nofile:  { soft: 65536, hard: 65536 }
+
+services:
+
+  # ─── Mode MAÎTRE : 3 nœuds ES + Kibana ────────────────────────────────
+  es-node1:
+    <<: *es-common
+    container_name: vpdf-node1
+    profiles: ["master"]
+    environment:
+      MODE:         master
+      NODE_NUMBER:  1
+      CLUSTER_NAME: ${CLUSTER_NAME}
+      SOUS_RESEAU:  ${SOUS_RESEAU}
+    volumes:
+      - es-data1:/usr/share/elasticsearch/data
+
+  es-node2:
+    <<: *es-common
+    container_name: vpdf-node2
+    profiles: ["master"]
+    environment:
+      MODE:         master
+      NODE_NUMBER:  2
+      CLUSTER_NAME: ${CLUSTER_NAME}
+      SOUS_RESEAU:  ${SOUS_RESEAU}
+    volumes:
+      - es-data2:/usr/share/elasticsearch/data
+
+  es-node3:
+    <<: *es-common
+    container_name: vpdf-node3
+    profiles: ["master"]
+    environment:
+      MODE:         master
+      NODE_NUMBER:  3
+      CLUSTER_NAME: ${CLUSTER_NAME}
+      SOUS_RESEAU:  ${SOUS_RESEAU}
+    volumes:
+      - es-data3:/usr/share/elasticsearch/data
+
+  kibana-master:
+    image: kibana:8.13.0
+    container_name: vpdf-kibana
+    profiles: ["master"]
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_HOSTS: "http://localhost:9201"
+      XPACK_SECURITY_ENABLED: "false"
+
+  # ─── Mode AUXILIAIRE : 1 nœud ES (+ Kibana local) ─────────────────────
+  es-aux:
+    <<: *es-common
+    container_name: vpdf-node-aux
+    profiles: ["aux"]
+    environment:
+      MODE:         aux
+      CLUSTER_NAME: ${CLUSTER_NAME}
+      SOUS_RESEAU:  ${SOUS_RESEAU}
+      IP_MAITRE:    ${IP_MAITRE}
+    volumes:
+      - es-data-aux:/usr/share/elasticsearch/data
+
+  kibana-aux:
+    image: kibana:8.13.0
+    container_name: vpdf-kibana-aux
+    profiles: ["aux"]
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_HOSTS: "http://${IP_MAITRE}:9201"
+      XPACK_SECURITY_ENABLED: "false"
+
+volumes:
+  es-data1:    { name: vpdf-es-data1 }
+  es-data2:    { name: vpdf-es-data2 }
+  es-data3:    { name: vpdf-es-data3 }
+  es-data-aux: { name: vpdf-es-data-aux }
