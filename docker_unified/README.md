@@ -46,6 +46,83 @@ docker compose --profile aux up -d --build
 Démarre `vpdf-node-aux` (numéro de nœud auto-attribué via l'API du
 maître) + une Kibana qui pointe sur le maître.
 
+## 3 bis. Arrêt des containers
+
+Depuis le dossier `docker_unified/` :
+
+```bash
+# Maître — arrête et supprime les 3 nœuds ES + Kibana
+docker compose --profile master down
+
+# Auxiliaire — arrête et supprime le nœud aux + Kibana aux
+docker compose --profile aux down
+```
+
+`down` préserve les volumes (données ES conservées). Variantes utiles :
+
+| Commande | Effet |
+|---|---|
+| `docker compose --profile master stop` | arrête sans supprimer les containers |
+| `docker compose --profile master start` | redémarre des containers déjà créés |
+| `docker compose --profile master restart` | stop + start |
+| `docker compose --profile master down -v` | ⚠ supprime aussi les volumes (**perte des données ES**) |
+
+Arrêter un container particulier :
+
+```bash
+docker stop vpdf-node1
+docker stop vpdf-node-aux
+```
+
+Voir l'état :
+
+```bash
+docker compose ps
+docker ps -a | grep vpdf
+```
+
+## 3 ter. Dépannage
+
+### `Conflict. The container name "/vpdf-node1" is already in use`
+
+Un ancien container du même nom existe encore (par exemple créé par
+l'ancien `docker-compose.principal.yml`). Le supprimer :
+
+```bash
+# Tous les containers vpdf-* en une commande
+docker rm -f $(docker ps -aq --filter "name=vpdf-")
+
+# Puis relancer
+docker compose --profile master up -d --build
+```
+
+Si tu sais d'où venait l'ancien compose, l'idéal est de le couper proprement
+avant :
+
+```bash
+# depuis le dossier de l'ancien compose
+docker compose -f docker-compose.principal.yml down
+```
+
+### `bootstrap checks failed: max virtual memory areas vm.max_map_count is too low`
+
+```bash
+sudo sysctl -w vm.max_map_count=262144
+# Pour le rendre permanent :
+echo "vm.max_map_count=262144" | sudo tee /etc/sysctl.d/99-elasticsearch.conf
+```
+
+### `Aucune IP locale dans 192.168.123.0/24`
+
+L'entrypoint n'a trouvé aucune interface dans le `SOUS_RESEAU` indiqué.
+Vérifier :
+
+```bash
+ip -4 addr show | grep inet
+```
+
+et corriger `SOUS_RESEAU` dans `.env`.
+
 ## 4. Vérification
 
 ```bash
