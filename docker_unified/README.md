@@ -55,6 +55,78 @@ curl http://<ip_maitre>:9201/_cluster/health?pretty
 
 Kibana : http://<ip_maitre>:5601
 
+## 4 bis. Pare-feu
+
+Avec `network_mode: host`, les ports des containers sont **directement
+ceux de l'hôte** : il faut donc autoriser le trafic au niveau du
+firewall de chaque machine. Adapter `192.168.123.0/24` au CIDR réel.
+
+### Ouvrir (avant le `up -d`)
+
+**Sur la machine maître** (`ufw`, Debian/Ubuntu) :
+
+```bash
+sudo ufw allow from 192.168.123.0/24 to any port 9201:9203 proto tcp comment 'vpdf-es-http'
+sudo ufw allow from 192.168.123.0/24 to any port 9301:9303 proto tcp comment 'vpdf-es-transport'
+sudo ufw allow from 192.168.123.0/24 to any port 5601    proto tcp comment 'vpdf-kibana'
+```
+
+**Sur chaque machine auxiliaire** — remplacer `N` par le numéro du nœud
+(ex. `4` pour `node-4`) :
+
+```bash
+sudo ufw allow from 192.168.123.0/24 to any port 920N proto tcp comment 'vpdf-es-http'
+sudo ufw allow from 192.168.123.0/24 to any port 930N proto tcp comment 'vpdf-es-transport'
+sudo ufw allow from 192.168.123.0/24 to any port 5601 proto tcp comment 'vpdf-kibana'
+```
+
+> Le port **transport `930N`** est obligatoire : le maître y ouvre des
+> connexions retour pour propager le cluster state et répliquer les shards.
+
+Variante `firewalld` (Fedora/RHEL) :
+```bash
+sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=192.168.123.0/24 port port=9201-9203 protocol=tcp accept'
+sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=192.168.123.0/24 port port=9301-9303 protocol=tcp accept'
+sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=192.168.123.0/24 port port=5601 protocol=tcp accept'
+sudo firewall-cmd --reload
+```
+
+### Fermer (après usage)
+
+**Sur la machine maître** :
+
+```bash
+sudo ufw delete allow from 192.168.123.0/24 to any port 9201:9203 proto tcp
+sudo ufw delete allow from 192.168.123.0/24 to any port 9301:9303 proto tcp
+sudo ufw delete allow from 192.168.123.0/24 to any port 5601    proto tcp
+```
+
+**Sur chaque machine auxiliaire** :
+
+```bash
+sudo ufw delete allow from 192.168.123.0/24 to any port 920N proto tcp
+sudo ufw delete allow from 192.168.123.0/24 to any port 930N proto tcp
+sudo ufw delete allow from 192.168.123.0/24 to any port 5601 proto tcp
+```
+
+Vérifier l'état :
+```bash
+sudo ufw status numbered
+```
+
+Variante `firewalld` (utiliser `--remove-rich-rule` avec la même règle qu'à
+l'ouverture) :
+```bash
+sudo firewall-cmd --permanent --remove-rich-rule='rule family=ipv4 source address=192.168.123.0/24 port port=9201-9203 protocol=tcp accept'
+sudo firewall-cmd --permanent --remove-rich-rule='rule family=ipv4 source address=192.168.123.0/24 port port=9301-9303 protocol=tcp accept'
+sudo firewall-cmd --permanent --remove-rich-rule='rule family=ipv4 source address=192.168.123.0/24 port port=5601 protocol=tcp accept'
+sudo firewall-cmd --reload
+```
+
+> Si le pare-feu est désactivé sur ta machine (`sudo ufw status` →
+> `inactive`), aucune action n'est nécessaire — mais ES est alors
+> exposé sur **toutes** les interfaces.
+
 ## 5. Comment ça marche
 
 Au démarrage, le container exécute `entrypoint.py` qui :
