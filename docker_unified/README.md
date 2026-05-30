@@ -31,6 +31,38 @@ Variables :
 | `IP_LOCALE`    | IP de cette machine. Renseignée → utilisée directement. Vide → auto-détection via `SOUS_RESEAU` |
 | `SOUS_RESEAU`  | CIDR du LAN, utilisé uniquement si `IP_LOCALE` est vide |
 | `IP_MAITRE`    | vide = maître ; renseigné = auxiliaire (IP du maître) |
+| `TAILSCALE_AUTHKEY` | (optionnel) clé d'auth Tailscale (`tskey-auth-…`) — voir §2 bis |
+
+## 2 bis. Tailscale (optionnel)
+
+Si vous voulez fédérer les machines via un **tailnet Tailscale** au
+lieu d'un LAN classique, faites‑le **avant** de lancer Docker :
+
+```bash
+# 1. Installer Tailscale (si pas déjà fait)
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# 2. Rejoindre le tailnet avec la clé d'auth (depuis .env)
+source .env
+sudo tailscale up --authkey="${TAILSCALE_AUTHKEY}"
+
+# 3. Récupérer l'IP Tailscale attribuée à cette machine
+tailscale ip -4
+# → ex : 100.64.1.23
+```
+
+Mettre la valeur obtenue dans `IP_LOCALE` :
+
+```bash
+sed -i "s|^IP_LOCALE=.*|IP_LOCALE=$(tailscale ip -4)|" .env
+```
+
+Sur les **auxiliaires**, faire de même puis renseigner `IP_MAITRE`
+avec l'IP Tailscale du maître (ex : `IP_MAITRE=100.64.1.10`).
+
+> Avec Tailscale, le pare‑feu local n'a pas besoin d'être ouvert :
+> le trafic passe par l'interface `tailscale0` (réseau virtuel
+> chiffré). On peut ignorer la section 4 bis ci‑dessous.
 
 ## 3. Lancement
 
