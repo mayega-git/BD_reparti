@@ -28,7 +28,8 @@ Variables :
 | Clé | Description |
 |---|---|
 | `CLUSTER_NAME` | nom du cluster (identique partout) |
-| `SOUS_RESEAU`  | CIDR du LAN — sert à détecter l'IP locale sans se tromper |
+| `IP_LOCALE`    | IP de cette machine. Renseignée → utilisée directement. Vide → auto-détection via `SOUS_RESEAU` |
+| `SOUS_RESEAU`  | CIDR du LAN, utilisé uniquement si `IP_LOCALE` est vide |
 | `IP_MAITRE`    | vide = maître ; renseigné = auxiliaire (IP du maître) |
 
 ## 3. Lancement

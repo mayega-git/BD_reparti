@@ -161,16 +161,25 @@ def exporter_env(numero, ip_hote, cluster_name, seed_hosts, bootstrap):
 def main():
     mode = os.environ.get("MODE", "").strip().lower()
     cluster_name = os.environ.get("CLUSTER_NAME", "").strip()
+    ip_locale = os.environ.get("IP_LOCALE", "").strip()
     sous_reseau = os.environ.get("SOUS_RESEAU", "").strip()
 
     if mode not in ("master", "aux"):
         fatal("MODE doit valoir 'master' ou 'aux'")
     if not cluster_name:
         fatal("CLUSTER_NAME requis")
-    if not sous_reseau:
-        fatal("SOUS_RESEAU requis (ex: 192.168.123.0/24)")
 
-    ip_hote = detecter_ip_hote(sous_reseau)
+    if ip_locale:
+        try:
+            ipaddress.ip_address(ip_locale)
+        except ValueError:
+            fatal(f"IP_LOCALE invalide : '{ip_locale}'")
+        ip_hote = ip_locale
+        info(f"IP hôte (IP_LOCALE depuis .env) : {ip_hote}")
+    else:
+        if not sous_reseau:
+            fatal("IP_LOCALE vide → SOUS_RESEAU requis pour l'auto-détection")
+        ip_hote = detecter_ip_hote(sous_reseau)
 
     # Bootstrap flag : ne réinjecter initial_master_nodes qu'au tout premier
     # démarrage (évite split-brain après redémarrage).

@@ -26,6 +26,7 @@ services:
       MODE:         master
       NODE_NUMBER:  1
       CLUSTER_NAME: ${CLUSTER_NAME}
+      IP_LOCALE:    ${IP_LOCALE}
       SOUS_RESEAU:  ${SOUS_RESEAU}
     volumes:
       - es-data1:/usr/share/elasticsearch/data
@@ -38,6 +39,7 @@ services:
       MODE:         master
       NODE_NUMBER:  2
       CLUSTER_NAME: ${CLUSTER_NAME}
+      IP_LOCALE:    ${IP_LOCALE}
       SOUS_RESEAU:  ${SOUS_RESEAU}
     volumes:
       - es-data2:/usr/share/elasticsearch/data
@@ -50,6 +52,7 @@ services:
       MODE:         master
       NODE_NUMBER:  3
       CLUSTER_NAME: ${CLUSTER_NAME}
+      IP_LOCALE:    ${IP_LOCALE}
       SOUS_RESEAU:  ${SOUS_RESEAU}
     volumes:
       - es-data3:/usr/share/elasticsearch/data
@@ -72,6 +75,7 @@ services:
     environment:
       MODE:         aux
       CLUSTER_NAME: ${CLUSTER_NAME}
+      IP_LOCALE:    ${IP_LOCALE}
       SOUS_RESEAU:  ${SOUS_RESEAU}
       IP_MAITRE:    ${IP_MAITRE}
     volumes:
