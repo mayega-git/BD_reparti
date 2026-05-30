@@ -1,5 +1,7 @@
 """Module 1 — Chargement et validation de la configuration."""
 
+import ipaddress
+
 from . import yaml_io
 from .constants import MIN_NOEUDS
 
@@ -7,6 +9,14 @@ from .constants import MIN_NOEUDS
 def charger_config(chemin):
     with open(chemin, "r", encoding="utf-8") as f:
         return yaml_io.safe_load(f.read())
+
+
+def _est_ip_valide(s):
+    try:
+        ipaddress.ip_address(s)
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 def valider_config(config):
@@ -30,4 +40,14 @@ def valider_config(config):
 
     if "ip_maitre" not in config:
         erreurs.append("Clé 'ip_maitre' manquante (peut être vide)")
+    else:
+        ip_m = (config.get("ip_maitre") or "").strip()
+        if ip_m and not _est_ip_valide(ip_m):
+            erreurs.append(f"ip_maitre invalide : '{ip_m}'")
+
+    ip_l = (config.get("ip_locale") or "").strip()
+    if ip_l and not _est_ip_valide(ip_l):
+        erreurs.append(f"ip_locale invalide : '{ip_l}'")
+
     return erreurs
+

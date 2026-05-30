@@ -48,6 +48,11 @@ cluster:
 # Laisser VIDE  → cette machine est le MAÎTRE
 # Renseigner    → cette machine est un AUXILIAIRE (IP du maître)
 ip_maitre: ""
+
+# IP locale de CETTE machine, annoncée aux autres nœuds du cluster.
+# Renseigner pour éviter toute ambiguïté (interfaces Docker, VPN…).
+# Laisser VIDE pour laisser le programme détecter automatiquement.
+ip_locale: ""
 ```
 
 ---
