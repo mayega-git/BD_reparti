@@ -43,13 +43,8 @@ def main():
             print(f"   - {e}")
         sys.exit(1)
 
-    ip_locale_cfg = (config.get("ip_locale") or "").strip()
-    if ip_locale_cfg:
-        ip_locale = ip_locale_cfg
-        print(f"ℹ IP locale (config.yml) : {ip_locale}")
-    else:
-        ip_locale = detecter_ip_locale()
-        print(f"ℹ IP locale détectée automatiquement : {ip_locale}")
+    ip_locale = detecter_ip_locale()
+    print(f"ℹ IP locale détectée : {ip_locale}")
 
     ip_maitre = (config.get("ip_maitre") or "").strip()
     if ip_maitre == "":
