@@ -33,36 +33,119 @@ Variables :
 | `IP_MAITRE`    | vide = maître ; renseigné = auxiliaire (IP du maître) |
 | `TAILSCALE_AUTHKEY` | (optionnel) clé d'auth Tailscale (`tskey-auth-…`) — voir §2 bis |
 
-## 2 bis. Tailscale (optionnel)
+## 2 bis. Tailscale (réseau distant)
 
-Si vous voulez fédérer les machines via un **tailnet Tailscale** au
-lieu d'un LAN classique, faites‑le **avant** de lancer Docker :
+Pour faire fonctionner le cluster **à travers Internet** plutôt qu'en LAN
+local, on utilise Tailscale : chaque machine obtient une IP stable
+`100.x.x.x` dans le tailnet, et le trafic est chiffré de bout en bout.
+
+L'IP Tailscale se met simplement dans `IP_LOCALE` — le reste de la config
+(ports, entrypoint, discovery ES) est inchangé.
+
+### Étape 1. Installer Tailscale et rejoindre le tailnet
+
+Sur **chaque** machine (maître + auxiliaires) :
 
 ```bash
-# 1. Installer Tailscale (si pas déjà fait)
 curl -fsSL https://tailscale.com/install.sh | sh
-
-# 2. Rejoindre le tailnet avec la clé d'auth (depuis .env)
-source .env
-sudo tailscale up --authkey="${TAILSCALE_AUTHKEY}"
-
-# 3. Récupérer l'IP Tailscale attribuée à cette machine
-tailscale ip -4
-# → ex : 100.64.1.23
+sudo tailscale up --authkey="tskey-auth-xxxxxxxxxx"
 ```
 
-Mettre la valeur obtenue dans `IP_LOCALE` :
+> La clé `tskey-auth-…` est fournie par l'admin du tailnet (générée sur
+> https://login.tailscale.com/admin/settings/keys). Tu peux aussi la
+> stocker dans `TAILSCALE_AUTHKEY` du `.env` et lancer
+> `sudo tailscale up --authkey="${TAILSCALE_AUTHKEY}"` après
+> `source .env`.
 
+Vérifier l'IP attribuée :
+
+```bash
+tailscale ip -4          # ex : 100.117.105.35
+tailscale status         # liste toutes les machines du tailnet
+```
+
+### Étape 2. Préparer `.env` à partir du template Tailscale
+
+```bash
+cp .env.tailscale.example .env
+```
+
+**Sur la machine maître** (exemple : IP Tailscale `100.117.105.35`) :
+```ini
+CLUSTER_NAME=vpdf-cluster
+IP_LOCALE=100.117.105.35          # IP Tailscale de cette machine
+IP_MAITRE=                         # vide → cette machine EST le maître
+```
+
+**Sur chaque machine auxiliaire** (exemple : son IP Tailscale est
+`100.64.1.42`) :
+```ini
+CLUSTER_NAME=vpdf-cluster
+IP_LOCALE=100.64.1.42              # IP Tailscale de cette machine
+IP_MAITRE=100.117.105.35          # IP Tailscale du maître
+```
+
+Variante automatisable :
 ```bash
 sed -i "s|^IP_LOCALE=.*|IP_LOCALE=$(tailscale ip -4)|" .env
 ```
 
-Sur les **auxiliaires**, faire de même puis renseigner `IP_MAITRE`
-avec l'IP Tailscale du maître (ex : `IP_MAITRE=100.64.1.10`).
+### Étape 3. Lancer
 
-> Avec Tailscale, le pare‑feu local n'a pas besoin d'être ouvert :
-> le trafic passe par l'interface `tailscale0` (réseau virtuel
-> chiffré). On peut ignorer la section 4 bis ci‑dessous.
+```bash
+# Sur le maître
+docker compose --profile master up -d --build
+
+# Sur chaque auxiliaire
+docker compose --profile aux up -d --build
+```
+
+L'entrypoint utilise `IP_LOCALE` comme `network.publish_host` et
+construit le `discovery.seed_hosts` pointant sur le maître via son IP
+Tailscale (ports transport `9301`, `9302`, `9303`). Le nouveau nœud
+n'a besoin de contacter qu'**un seul** des trois nœuds du maître pour
+recevoir la topologie complète — les deux autres assurent la redondance
+en cas de panne.
+
+### Étape 4. Vérification depuis n'importe quelle machine du tailnet
+
+```bash
+curl http://100.117.105.35:9201/_cluster/health?pretty
+curl "http://100.117.105.35:9201/_cat/nodes?v&h=name,ip,master"
+```
+
+La colonne `ip` doit afficher les IPs Tailscale (`100.x.x.x`), et
+`status` doit être `green`.
+
+### Avantages vs LAN
+
+| | LAN | Tailscale |
+|---|---|---|
+| Pare-feu local (§4 bis) | à ouvrir | inutile (interface `tailscale0` chiffrée) |
+| Machines hors site | impossible | natif |
+| Auto‑découverte d'IP | risque de prendre une mauvaise interface | IP Tailscale unique et stable |
+| Ajout d'une machine | config réseau + firewall | `tailscale up` puis `docker compose up -d` |
+
+### Ajouter une nouvelle machine auxiliaire en 3 commandes
+
+Sur la nouvelle machine, une fois Docker installé :
+
+```bash
+# 1. Rejoindre le tailnet
+sudo tailscale up --authkey="tskey-auth-xxxxxxxxxx"
+
+# 2. Cloner + configurer
+git clone <repo> && cd BD_reparti/docker_unified
+cp .env.tailscale.example .env
+sed -i "s|^IP_LOCALE=.*|IP_LOCALE=$(tailscale ip -4)|" .env
+sed -i "s|^IP_MAITRE=.*|IP_MAITRE=100.117.105.35|"     .env
+
+# 3. Démarrer
+docker compose --profile aux up -d --build
+```
+
+Le `node-N` est attribué automatiquement par interrogation de
+`http://${IP_MAITRE}:9201/_cat/nodes` (entrypoint Python).
 
 ## 3. Lancement
 
